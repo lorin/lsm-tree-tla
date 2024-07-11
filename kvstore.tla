@@ -21,7 +21,7 @@ Always returns "ok"
 ---- MODULE kvstore ----
 CONSTANTS Keys, Vals, MISSING, NIL
 
-Ops == {"get", "insert", "delete", "update"}
+Ops == {"get", "upsert", "delete"}
 
 ASSUME MISSING \notin Vals
 ASSUME NIL \notin Vals \union Ops \union {MISSING}
@@ -100,8 +100,7 @@ DeleteResp ==
 Next == \/ \E k \in Keys: 
            \/ GetReq(k)
            \/ DeleteReq(k)
-           \/ \E v \in Vals: \/ InsertReq(k, v)  
-                             \/ UpdateReq(k, v)
+           \/ \E v \in Vals: UpsertReq(k, v)  
         \/ GetResp
         \/ UpsertResp
         \/ DeleteResp
