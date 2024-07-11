@@ -6,6 +6,7 @@ CONSTANTS NTrees, NKeys, Vals,
           READY,
           GET_VALUE
 
+
 NIL == CHOOSE NIL : NIL \notin Vals
 MISSING == CHOOSE MISSING : MISSING \notin (Vals \union {NIL})
 
@@ -37,7 +38,6 @@ Init ==
     /\ state = READY
     /\ focus = NIL
 
-
 GetReq(key) ==
     /\ state = READY
     /\ op' = "get"
@@ -62,7 +62,6 @@ GetResponse ==
           [] OTHER                                       -> MISSING
        /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction, op, args>>
 
-(* 
 UpsertReq(key, val) ==
     /\ state = READY
     /\ op' = "upsert"
@@ -70,7 +69,6 @@ UpsertReq(key, val) ==
     /\ ret' = NIL
     /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction>>
 
-*)
 
 
 TypeOk == 
@@ -82,6 +80,7 @@ TypeOk ==
 
 Next == 
     \/ \E k \in Keys : GetReq(k)
-\*    \/ \E k \in Keys, v \in Vals : UpsertReq(k, v)
+    \/ \E k \in Keys, v \in Vals : UpsertReq(k, v)
     \/ GetResponse
-===
+
+====
