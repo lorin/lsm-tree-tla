@@ -154,9 +154,13 @@ Get(node, key) ==
       [] present /\ val = TOMBSTONE -> MISSING
       [] OTHER                      -> Get(next[node], key)
 
+kvDict == [key \in Keys |-> Get(memtable, key)]
+kvState == IF state \in {READY, WRITE_TO_DISK} THEN "ready" ELSE "working"
+Alias == [kvState |-> kvState, kvDict |-> kvDict]
+
 Mapping == INSTANCE kvstore
-    WITH dict <- [key \in Keys |-> Get(memtable, key)],
-         state <- IF state \in {READY, WRITE_TO_DISK} THEN "ready" ELSE "working"
+    WITH dict <- kvDict,
+         state <- kvState
 
 Refinement == Mapping!Spec
 ====
