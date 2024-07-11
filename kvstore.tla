@@ -73,7 +73,7 @@ Absent(key) == dict[key] = MISSING
 
 UpsertResp == LET key == args[1]
                   val == args[2] IN
-       /\ op = "insert"
+       /\ op = "upsert"
        /\ state = "working"
        /\ dict' = [dict EXCEPT ![key] = val]
        /\ ret' = "ok"
