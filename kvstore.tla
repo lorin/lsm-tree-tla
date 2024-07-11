@@ -3,20 +3,15 @@
 # Operations
 
 * get
-* insert
-* update
+* upsert
 * delete
 
 ## get
 Return NIL if the key is not in the store
 
 ## insert
-Return "ok" on success
-Return "error" if the key already exists
+Always returns "ok"
 
-## update
-Return "ok" on success
-Return "error" if the key does not exist
 
 ## delete
 
@@ -41,7 +36,7 @@ TypeOK ==
     /\ args \in {<<k>>: k \in Keys} \union {<<k,v>>: k \in Keys, v \in Vals} \union {NIL}
     /\ dict \in [Keys -> Vals \union {MISSING}]
     /\ op \in Ops \union {NIL} \* initial state for Ops is NIL
-    /\ ret \in Vals \union {"ok", "error", MISSING, NIL}
+    /\ ret \in Vals \union {"ok", MISSING, NIL}
     /\ state \in {"ready", "working"}
 
 Init ==
@@ -65,9 +60,9 @@ GetResp == LET key == args[1] IN
     /\ state' = "ready"
     /\ UNCHANGED <<op, args, dict>>
 
-InsertReq(key, val) ==
+UpsertReq(key, val) ==
     /\ state = "ready"
-    /\ op' = "insert"
+    /\ op' = "upsert"
     /\ args' = <<key, val>>
     /\ ret' = NIL
     /\ state' = "working"
@@ -76,33 +71,12 @@ InsertReq(key, val) ==
 Present(key) == dict[key] \in Vals
 Absent(key) == dict[key] = MISSING
 
-InsertResp == LET key == args[1]
+UpsertResp == LET key == args[1]
                   val == args[2] IN
        /\ op = "insert"
        /\ state = "working"
-       /\ dict' = IF Absent(key)
-                  THEN [dict EXCEPT ![key] = val]
-                  ELSE dict
-       /\ ret' = IF Absent(key) THEN "ok" ELSE "error"
-       /\ state' = "ready"
-       /\ UNCHANGED <<op, args>>
-
-UpdateReq(key, val) ==
-    /\ state = "ready"
-    /\ op' = "update"
-    /\ args' = <<key, val>>
-    /\ ret' = NIL
-    /\ state' = "working"
-    /\ UNCHANGED dict
-
-UpdateResp ==
-    LET key == args[1]
-        val == args[2]
-    IN /\ op = "update"
-       /\ ret' = IF Present(key) THEN "ok" ELSE "error"
-       /\ dict' = IF Present(key)
-                  THEN [dict EXCEPT ![key]=val]
-                  ELSE dict
+       /\ dict' = [dict EXCEPT ![key] = val]
+       /\ ret' = "ok"
        /\ state' = "ready"
        /\ UNCHANGED <<op, args>>
 
@@ -129,12 +103,11 @@ Next == \/ \E k \in Keys:
            \/ \E v \in Vals: \/ InsertReq(k, v)  
                              \/ UpdateReq(k, v)
         \/ GetResp
-        \/ InsertResp
-        \/ UpdateResp
+        \/ UpsertResp
         \/ DeleteResp
 
 vars == <<op, args, ret, dict, state>>
 
-Spec == Init /\ [][Next]_vars /\ WF_op(\E k \in Keys: DeleteReq(k))
+Spec == Init /\ [][Next]_vars
 
 ====
