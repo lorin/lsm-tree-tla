@@ -2,9 +2,12 @@
 EXTENDS TLC, Naturals
 
 CONSTANTS NTrees, NKeys, Vals,
-          NIL, TOMBSTONE, MISSING,
+          TOMBSTONE, 
           READY,
           GET_VALUE
+
+NIL == CHOOSE NIL : NIL \notin Vals
+MISSING == CHOOSE MISSING : MISSING \notin (Vals \union {NIL})
 
 VARIABLES memtable,
           next,
@@ -55,12 +58,19 @@ GetResponse ==
        /\ ret' = 
         CASE key \in keysOf[focus] /\ val # TOMBSTONE    -> val
           [] key \in keysOf[focus] /\ val = TOMBSTONE    -> MISSING
-          [] key \notin keysOfFocus /\ next[focus] # NIL -> GET_VALUE
+          [] key \notin keysOf[focus] /\ next[focus] # NIL -> GET_VALUE
           [] OTHER                                       -> MISSING
        /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction, op, args>>
 
+(* 
+UpsertReq(key, val) ==
+    /\ state = READY
+    /\ op' = "upsert"
+    /\ args' = <<key, val>>
+    /\ ret' = NIL
+    /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction>>
 
-
+*)
 
 
 TypeOk == 
@@ -72,5 +82,6 @@ TypeOk ==
 
 Next == 
     \/ \E k \in Keys : GetReq(k)
-    \/ GetReponse
-====
+\*    \/ \E k \in Keys, v \in Vals : UpsertReq(k, v)
+    \/ GetResponse
+===
