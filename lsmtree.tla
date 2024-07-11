@@ -9,6 +9,7 @@ CONSTANTS NTrees, NKeys, Vals,
           READY,
           GET_VALUE,
           UPSERT_RESPONSE,
+          DELETE_RESPONSE,
           WRITE_TO_DISK
 
 
@@ -63,7 +64,7 @@ GetResponse ==
        /\ ret' = 
         CASE key \in keysOf[focus] /\ val # TOMBSTONE      -> val
           [] key \in keysOf[focus] /\ val = TOMBSTONE      -> MISSING
-          [] key \notin keysOf[focus] /\ next[focus] # NIL -> GET_VALUE
+          [] key \notin keysOf[focus] /\ next[focus] # NIL -> ret
           [] OTHER                                         -> MISSING
        /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction, op, args>>
 
@@ -77,22 +78,41 @@ UpsertReq(key, val) ==
 
 MemtableAtCapacity == Cardinality(keysOf[memtable]) = THRESHOLD
 
+DeleteReq(key) ==
+    /\ state = READY
+    /\ op' = "delete"
+    /\ args' = <<key>>
+    /\ ret' = NIL
+    /\ state' = DELETE_RESPONSE
+    /\ focus' = memtable
+    /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction>>
+
+DeleteResponse ==
+    LET key == args[1] IN 
+    /\ state = DELETE_RESPONSE
+    /\ ret' = "ok"
+    /\ state' = IF MemtableAtCapacity THEN WRITE_TO_DISK ELSE READY
+    /\ keysOf' = [keysOf EXCEPT ![memtable]=@ \union {key}]
+    /\ valOf' = [valOf EXCEPT ![memtable, key]=TOMBSTONE]
+    /\ UNCHANGED <<op, args, free, memtable, compaction, focus, next>>
 
 UpsertResponse ==
     LET key == args[1]
         val == args[2] IN
     /\ state = UPSERT_RESPONSE
-    /\ ret' = "ok"
     /\ state' = IF MemtableAtCapacity THEN WRITE_TO_DISK ELSE READY
+    /\ ret' = "ok"
     /\ keysOf' = [keysOf EXCEPT ![memtable]=@ \union {key}]
     /\ valOf' = [valOf EXCEPT ![memtable, key]=val]
-    /\ UNCHANGED <<op, args, free, compaction, focus, next>>
+    /\ UNCHANGED <<op, args, free, memtable, compaction, focus, next>>
 
+SpaceLeft == free # {}
 
 \* Write memtable to disk
 WriteToDisk ==
     LET disktree == (CHOOSE tree \in free : TRUE) IN 
        /\ state = WRITE_TO_DISK
+       /\ SpaceLeft
        /\ next' = [next EXCEPT ![memtable]=disktree]
        /\ keysOf' = [keysOf EXCEPT ![memtable]={}, ![disktree]=keysOf[memtable]]
        /\ valOf' = [t \in Trees, k \in Keys |-> 
@@ -101,8 +121,8 @@ WriteToDisk ==
                           [] OTHER        -> valOf[t, k] ]
        /\ free' = free \ {disktree}
        /\ state' = READY
-       /\ UNCHANGED <<op, args, ret, compaction, focus>>
-
+       /\ ret' = "ok"
+       /\ UNCHANGED <<memtable, op, args, compaction, focus>>
 
 
 TypeOk == 
@@ -117,6 +137,26 @@ Next ==
     \/ \E k \in Keys, v \in Vals : UpsertReq(k, v)
     \/ GetResponse
     \/ UpsertResponse
+    \/ DeleteResponse
     \/ WriteToDisk
 
+\*
+\* Refinement mapping
+\*
+RECURSIVE Get(_, _)
+
+Get(node, key) == 
+    LET keys == keysOf[node]
+        present == key \in keys
+        val == valOf[node, key]
+    IN CASE node = NIL              -> MISSING
+      [] present /\ val # TOMBSTONE -> val
+      [] present /\ val = TOMBSTONE -> MISSING
+      [] OTHER                      -> Get(next[node], key)
+
+Mapping == INSTANCE kvstore
+    WITH dict <- [key \in Keys |-> Get(memtable, key)],
+         state <- IF state \in {READY, WRITE_TO_DISK} THEN "ready" ELSE "working"
+
+Refinement == Mapping!Spec
 ====
