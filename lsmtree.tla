@@ -77,18 +77,23 @@ GetResponse ==
           [] OTHER                                         -> MISSING
        /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction, op, args>>
 
+MemtableAtCapacity == Cardinality(keysOf[memtable]) = THRESHOLD
+
 UpsertReq(key, val) ==
     /\ state = READY
+    \* To avoid deadlock, we need to either be below capacity or there has to be at least one free node so we can flush to disk if needed
+    /\ MemtableAtCapacity => free # {}
     /\ state' = UPSERT_RESPONSE
     /\ op' = "upsert"
     /\ args' = <<key, val>>
     /\ ret' = NIL
     /\ UNCHANGED <<memtable, next, keysOf, valOf, free, compaction, focus>>
 
-MemtableAtCapacity == Cardinality(keysOf[memtable]) = THRESHOLD
 
 DeleteReq(key) ==
     /\ state = READY
+    \* To avoid deadlock, we need to either be below capacity or there has to be at least one free node so we can flush to disk if needed
+    /\ MemtableAtCapacity => free # {}
     /\ op' = "delete"
     /\ args' = <<key>>
     /\ ret' = NIL
