@@ -113,7 +113,7 @@ WriteToDisk ==
     LET disktree == (CHOOSE tree \in free : TRUE) IN 
        /\ state = WRITE_TO_DISK
        /\ SpaceLeft
-       /\ next' = [next EXCEPT ![memtable]=disktree]
+       /\ next' = [next EXCEPT ![memtable]=disktree, ![disktree]=next[memtable]]
        /\ keysOf' = [keysOf EXCEPT ![memtable]={}, ![disktree]=keysOf[memtable]]
        /\ valOf' = [t \in Trees, k \in Keys |-> 
                         CASE t = disktree -> valOf[memtable, k]
@@ -156,7 +156,18 @@ Get(node, key) ==
 
 kvDict == [key \in Keys |-> Get(memtable, key)]
 kvState == IF state \in {READY, WRITE_TO_DISK} THEN "ready" ELSE "working"
-Alias == [kvState |-> kvState, kvDict |-> kvDict]
+Alias == [
+    op |-> op,
+    args |-> args,
+    ret |-> ret, 
+    kvState |-> kvState, 
+    kvDict |-> kvDict,
+    memtable |-> memtable,
+    disktree |-> next[memtable],
+    keysOf |-> keysOf,
+    valOf |-> valOf,
+    next |-> next
+    ]
 
 Mapping == INSTANCE kvstore
     WITH dict <- kvDict,
