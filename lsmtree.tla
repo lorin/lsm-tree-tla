@@ -12,9 +12,19 @@ CONSTANTS NTrees, NKeys, Vals,
           DELETE_RESPONSE,
           WRITE_TO_DISK
 
+Keys == 1..NKeys
 
-NIL == CHOOSE NIL : NIL \notin Vals
-MISSING == CHOOSE MISSING : MISSING \notin (Vals \union {NIL})
+
+MISSING == CHOOSE MISSING : MISSING \notin Vals
+
+Ops == {"get", "upsert", "delete"}
+
+Rets == {"ok", MISSING} \union Vals
+
+Args == [1..1 -> Keys] \union Keys \X Vals
+
+NIL == CHOOSE NIL : NIL \notin UNION {Keys, Vals, Ops, Args, Rets, {MISSING}}
+
 
 VARIABLES memtable,
           next,
@@ -28,7 +38,6 @@ VARIABLES memtable,
           state,
           focus
 
-Keys == 1..NKeys
 Trees == 1..NTrees
 
 Init == 
@@ -106,13 +115,12 @@ UpsertResponse ==
     /\ valOf' = [valOf EXCEPT ![memtable, key]=val]
     /\ UNCHANGED <<op, args, free, memtable, compaction, focus, next>>
 
-SpaceLeft == free # {}
 
 \* Write memtable to disk
 WriteToDisk ==
     LET disktree == (CHOOSE tree \in free : TRUE) IN 
        /\ state = WRITE_TO_DISK
-       /\ SpaceLeft
+       /\ free # {}
        /\ next' = [next EXCEPT ![memtable]=disktree, ![disktree]=next[memtable]]
        /\ keysOf' = [keysOf EXCEPT ![memtable]={}, ![disktree]=keysOf[memtable]]
        /\ valOf' = [t \in Trees, k \in Keys |-> 
@@ -129,7 +137,9 @@ WriteToDisk ==
 \* The set of nodes reachable from a given node based on the `next` relationship.
 \* This is also known as reflexive transitive closure
 RECURSIVE reachable(_)
-reachable(n) == IF n = NIL THEN {} ELSE {n} \UNION reachable(next[n])
+reachable(n) == IF n = NIL
+                THEN {} 
+                ELSE {n} \union reachable(next[n])
 
 \* Trees that are stored on disk
 onDisk == reachable(next[memtable])
@@ -141,22 +151,38 @@ prev(n) == IF       \E p \in Trees : next[p] = n
            THEN CHOOSE p \in Trees : next[p] = n
            ELSE NIL
 
-candidates == {S \in SUBSET onDisk : \E h, t \in S : 
+
+\* Set of sequences of length 2 or greater that represent on-disk trees.
+\* These form our candidates for compaction
+runs == {S \in SUBSET onDisk : \E h, t \in S : 
                 /\ {next[h], prev(t)} \subseteq S 
-                /\ \A n \in S \ {h,t} : {next[n], prev(n)} \subseteq S
-}
+                /\ \A n \in S \ {h,t} : {next[n], prev(n)} \subseteq S}
+
+\* The set of runs that are not currently involved in compaction
+candidates == {S \in runs : S \intersect compacting = {}}
 
 \** Start compacting a collection of trees
-\* StartCompaction == 
+StartCompaction == 
+    \* there must be a candidate set where none of the candidates are involved in compacting
+    LET new == CHOOSE n \in free: TRUE
+    IN 
+    /\ candidates # {}
+    /\ free # {}
+    /\ compaction' \in {compaction \union {[old|->x, new|->new]} : x \in candidates}
+    /\ free' = free \ {new}
+    /\ UNCHANGED<<memtable, next, keysOf, valOf, op, args, ret, state, focus>>
 
 
 TypeOk == 
+    /\ op \in Ops \union {NIL}
+    /\ args \in Args \union {NIL}
+    /\ ret \in Rets \union {NIL}
     /\ memtable \in Trees
     /\ next \in [Trees -> Trees \union {NIL}]
     /\ keysOf \in [Trees -> SUBSET Keys]
     /\ valOf \in [Trees \X Keys -> Vals \union {MISSING, TOMBSTONE}]
     /\ free \in SUBSET Trees
-    /\ compaction \in [old: SUBSET Trees, new: Trees]
+    /\ compaction \subseteq [old: SUBSET Trees, new: Trees]
 
 Next == 
     \/ \E k \in Keys : GetReq(k)
@@ -165,6 +191,7 @@ Next ==
     \/ UpsertResponse
     \/ DeleteResponse
     \/ WriteToDisk
+    \/ StartCompaction
 
 \*
 \* Refinement mapping
