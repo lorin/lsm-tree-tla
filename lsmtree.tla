@@ -125,12 +125,38 @@ WriteToDisk ==
        /\ UNCHANGED <<memtable, op, args, compaction, focus>>
 
 
+
+\* The set of nodes reachable from a given node based on the `next` relationship.
+\* This is also known as reflexive transitive closure
+RECURSIVE reachable(_)
+reachable(n) == IF n = NIL THEN {} ELSE {n} \UNION reachable(next[n])
+
+\* Trees that are stored on disk
+onDisk == reachable(next[memtable])
+
+\* Trees that are currently in the process of being compacted
+compacting == UNION {x.old : x \in compaction}
+
+prev(n) == IF       \E p \in Trees : next[p] = n
+           THEN CHOOSE p \in Trees : next[p] = n
+           ELSE NIL
+
+candidates == {S \in SUBSET onDisk : \E h, t \in S : 
+                /\ {next[h], prev(t)} \subseteq S 
+                /\ \A n \in S \ {h,t} : {next[n], prev(n)} \subseteq S
+}
+
+\** Start compacting a collection of trees
+\* StartCompaction == 
+
+
 TypeOk == 
     /\ memtable \in Trees
     /\ next \in [Trees -> Trees \union {NIL}]
     /\ keysOf \in [Trees -> SUBSET Keys]
     /\ valOf \in [Trees \X Keys -> Vals \union {MISSING, TOMBSTONE}]
     /\ free \in SUBSET Trees
+    /\ compaction \in [old: SUBSET Trees, new: Trees]
 
 Next == 
     \/ \E k \in Keys : GetReq(k)
