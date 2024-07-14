@@ -64,18 +64,18 @@ GetReq(key) ==
     /\ op' = "get"
     /\ args' = <<key>>
     /\ ret' = NIL
-    /\ state' = GET_VALUE
+    /\ state' = GET_RESPONSE
     /\ focus' = memtable
     /\ UNCHANGED <<memtable, next, keysOf, valOf, free, c, compaction, mutex>>
 
 GetResponse == 
     LET key == args[1]
         val == valOf[focus, key]
-    IN /\ state = GET_VALUE
+    IN /\ state = GET_RESPONSE
        /\ focus # memtable => mutex \in {UNLOCKED, READING}
        /\ state' = IF key \in keysOf[focus] \/ next[focus] = NIL
                    THEN READY
-                   ELSE GET_VALUE
+                   ELSE GET_RESPONSE
        /\ focus' = IF state' = GET_VALUE THEN next[focus] ELSE NIL
        /\ mutex' = IF state' = READY THEN UNLOCKED ELSE READING
        /\ ret' = 
