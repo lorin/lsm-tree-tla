@@ -1,9 +1,11 @@
-(*
+(*************************************************************
+
+A behavioral spec for a key-value store.
 
 # Operations
 
 * get
-* upsert
+* upsert (put)
 * delete
 
 ## get
@@ -14,10 +16,9 @@
 Always returns "ok"
 
 ## delete
-
 Always returns "ok"
 
-*)
+ *************************************************************)
 ---- MODULE kvstore ----
 CONSTANTS Keys, Vals, MISSING, NIL
 
@@ -33,9 +34,9 @@ VARIABLES op,
     dict \* tracks mapping of keys to values
 
 TypeOK ==
-    /\ args \in {<<k>>: k \in Keys} \union {<<k,v>>: k \in Keys, v \in Vals} \union {NIL}
+    /\ args \in {<<k>>: k \in Keys} \union Keys \X Vals \union {NIL}
     /\ dict \in [Keys -> Vals \union {MISSING}]
-    /\ op \in Ops \union {NIL} \* initial state for Ops is NIL
+    /\ op \in Ops \union {NIL} 
     /\ ret \in Vals \union {"ok", MISSING, NIL}
     /\ state \in {"ready", "working"}
 
@@ -67,9 +68,6 @@ UpsertReq(key, val) ==
     /\ ret' = NIL
     /\ state' = "working"
     /\ UNCHANGED <<dict>>
-
-Present(key) == dict[key] \in Vals
-Absent(key) == dict[key] = MISSING
 
 UpsertResp == LET key == args[1]
                   val == args[2] IN
