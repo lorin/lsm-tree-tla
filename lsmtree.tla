@@ -1,12 +1,11 @@
 ---- MODULE lsmtree ----
-EXTENDS TLC, Naturals, FiniteSets
+EXTENDS TLC, Naturals
 
 CONSTANTS NTrees, NKeys, Vals,
-          TOMBSTONE, 
 
          \* program states
           READY,
-          GET_VALUE,
+          GET_RESPONSE,
           UPSERT_RESPONSE,
           DELETE_RESPONSE,
           WRITE_TO_DISK,
@@ -17,7 +16,8 @@ CONSTANTS NTrees, NKeys, Vals,
 Keys == 1..NKeys
 
 
-MISSING == CHOOSE MISSING : MISSING \notin Vals
+TOMBSTONE == CHOOSE TOMBSTONE : TOMBSTONE \notin Vals
+MISSING == CHOOSE MISSING : MISSING \notin Vals \union {TOMBSTONE}
 
 Ops == {"get", "upsert", "delete"}
 
@@ -76,7 +76,7 @@ GetResponse ==
        /\ state' = IF key \in keysOf[focus] \/ next[focus] = NIL
                    THEN READY
                    ELSE GET_RESPONSE
-       /\ focus' = IF state' = GET_VALUE THEN next[focus] ELSE NIL
+       /\ focus' = IF state' = GET_RESPONSE THEN next[focus] ELSE NIL
        /\ mutex' = IF state' = READY THEN UNLOCKED ELSE READING
        /\ ret' = 
         CASE key \in keysOf[focus] /\ val # TOMBSTONE      -> val
@@ -172,7 +172,7 @@ runs == {S \in SUBSET onDisk : \E h, t \in S :
 \* The set of runs that are not currently involved in compaction
 candidates == {S \in runs : S \intersect compacting = {}}
 
-\** Start compacting a collection of trees
+\* Start compacting a collection of trees
 StartCompaction == 
     \* there must be a candidate set where none of the candidates are involved in compacting
     LET new == CHOOSE n \in free: TRUE IN 
@@ -246,7 +246,7 @@ TypeOk ==
     /\ next \in [Trees -> Trees \union {NIL}]
     /\ keysOf \in [Trees -> SUBSET Keys]
     /\ valOf \in [Trees \X Keys -> Vals \union {MISSING, TOMBSTONE}]
-    /\ free \in SUBSET Trees
+    /\ free \subseteq Trees
     /\ c \in [old: SUBSET Trees, new: Trees] \union {NIL}
     /\ compaction \subseteq [old: SUBSET Trees, new: Trees]
     /\ mutex \in {UNLOCKED, READING, COMPACTING}
