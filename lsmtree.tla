@@ -173,27 +173,42 @@ runs == {S \in SUBSET onDisk : \E h, t \in S :
 candidates == {S \in runs : S \intersect compacting = {}}
 
 \** Start compacting a collection of trees
-
 StartCompaction == 
     \* there must be a candidate set where none of the candidates are involved in compacting
-    LET new == CHOOSE n \in free: TRUE
-    IN 
+    LET new == CHOOSE n \in free: TRUE IN 
     /\ candidates # {}
     /\ free # {}
     /\ compaction' \in {compaction \union {[old|->x, new|->new]} : x \in candidates}
-    /\ c' \in compaction'  \* Choose one to finish the compaction
     /\ free' = free \ {new}
-    /\ UNCHANGED<<memtable, next, keysOf, valOf, op, args, ret, state, focus, mutex>>
-
-GetLockForCompaction ==
-    /\ compaction # {}
-    /\ mutex = UNLOCKED
-    /\ mutex' = COMPACTING'
-    /\ UNCHANGED<<memtable, next, keysOf, valOf, op, args, ret, state, focus, c, compaction, free>>
+    /\ UNCHANGED<<memtable, next, keysOf, valOf, op, args, ret, state, focus, mutex, c>>
 
 \* Return the first tree (according to `next` order) that contains `key`
 firstOf(key, trees) == CHOOSE t \in trees : /\ key \in keysOf[t]
                                             /\ \A u \in trees \ {t} : key \in keysOf[u] => u \in reachable(next[t])
+
+\* Set the keys and values of one of the trees created via compacting
+PopulateNewTree ==
+    LET empties == {t \in compaction : keysOf[t.new] = {}}
+        old == c'.old
+        new == c'.new
+        keys == UNION {keysOf[x]: x \in old}
+    IN 
+    /\ empties # {}
+    /\ c' \in empties
+    /\ keysOf' = [keysOf EXCEPT ![new] = keys]
+    /\ valOf' = [t \in Trees, k \in Keys |-> IF t=new /\ k \in keys THEN valOf[firstOf(k, old), k] ELSE valOf[t, k]]
+    /\ UNCHANGED<<memtable, next, op, args, ret, state, focus, compaction, free, mutex>>
+    
+
+
+\* Get a lock and a tree (`c`) to finish compacting
+GetLockForCompaction ==
+    /\ compaction # {}
+    /\ mutex = UNLOCKED
+    /\ mutex' = COMPACTING'
+    /\ c' \in {t \in compaction : keysOf[t.new] # {}}
+    /\ UNCHANGED<<memtable, next, keysOf, valOf, op, args, ret, state, focus, compaction, free>>
+
 
 \* Pick one of the compaction candidates
 FinishCompaction ==
@@ -206,9 +221,7 @@ FinishCompaction ==
        /\ mutex = COMPACTING
        /\ compaction # {}
        /\ compaction' = compaction \ {c}
-       /\ keysOf' = [t \in Trees |-> CASE t=new     -> keys
-                                       [] t \in old -> {}
-                                       [] OTHER     -> keysOf[t]]
+       /\ keysOf' = [t \in Trees |-> IF t \in old THEN {} ELSE keysOf[t]]
        /\ free' = free \union old
        /\ next' = [t \in Trees |-> 
                     CASE t=new         -> next[last]
@@ -220,7 +233,8 @@ FinishCompaction ==
                       [] t \in old           -> MISSING
                       [] OTHER               -> valOf[t, k]]
        /\ mutex' = UNLOCKED
-       /\ UNCHANGED<<memtable, op, args, ret, state, focus, c>>
+       /\ c' = NIL
+       /\ UNCHANGED<<memtable, op, args, ret, state, focus>>
 
 
 
@@ -246,6 +260,7 @@ Next ==
     \/ DeleteResponse
     \/ WriteToDisk
     \/ StartCompaction
+    \/ PopulateNewTree
     \/ GetLockForCompaction
     \/ FinishCompaction
 
