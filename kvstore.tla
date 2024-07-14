@@ -7,11 +7,11 @@
 * delete
 
 ## get
-Return NIL if the key is not in the store
+- Return the value associated with the key
+- Return MISSING if the key is not in the store.
 
-## insert
+## update
 Always returns "ok"
-
 
 ## delete
 
@@ -97,10 +97,10 @@ DeleteResp ==
        /\ dict' = [dict EXCEPT ![key]=MISSING]
        /\ UNCHANGED <<op, args>>
 
-Next == \/ \E k \in Keys: 
+Next == \/ \E k \in Keys:
            \/ GetReq(k)
            \/ DeleteReq(k)
-           \/ \E v \in Vals: UpsertReq(k, v)  
+           \/ \E v \in Vals: UpsertReq(k, v)
         \/ GetResp
         \/ UpsertResp
         \/ DeleteResp
