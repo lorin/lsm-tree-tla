@@ -3,7 +3,6 @@ EXTENDS TLC, Naturals, FiniteSets
 
 CONSTANTS NTrees, NKeys, Vals,
           TOMBSTONE, 
-          THRESHOLD,
 
          \* program states
           READY,
@@ -86,12 +85,10 @@ GetResponse ==
           [] OTHER                                         -> MISSING
        /\ UNCHANGED <<memtable, next, keysOf, valOf, free, c, compaction, op, args>>
 
-MemtableAtCapacity == Cardinality(keysOf[memtable]) = THRESHOLD
-
 UpsertReq(key, val) ==
     /\ state = READY
-    \* To avoid deadlock, we need to either be below capacity or there has to be at least one free node so we can flush to disk if needed
-    /\ MemtableAtCapacity => free # {}
+    \* To avoid deadlock, we need to ensure there is at least one free tree if we need to write
+    /\ free # {}
     /\ state' = UPSERT_RESPONSE
     /\ op' = "upsert"
     /\ args' = <<key, val>>
@@ -101,8 +98,8 @@ UpsertReq(key, val) ==
 
 DeleteReq(key) ==
     /\ state = READY
-    \* To avoid deadlock, we need to either be below capacity or there has to be at least one free node so we can flush to disk if needed
-    /\ MemtableAtCapacity => free # {}
+    \* To avoid deadlock, we need to ensure there is at least one free tree if we need to write
+    /\ free # {}
     /\ op' = "delete"
     /\ args' = <<key>>
     /\ ret' = NIL
@@ -114,7 +111,7 @@ DeleteResponse ==
     LET key == args[1] IN 
     /\ state = DELETE_RESPONSE
     /\ ret' = "ok"
-    /\ state' = IF MemtableAtCapacity THEN WRITE_TO_DISK ELSE READY
+    /\ state' \in {WRITE_TO_DISK, READY}
     /\ keysOf' = [keysOf EXCEPT ![memtable]=@ \union {key}]
     /\ valOf' = [valOf EXCEPT ![memtable, key]=TOMBSTONE]
     /\ UNCHANGED <<op, args, free, memtable, c, compaction, focus, next, mutex>>
@@ -123,7 +120,7 @@ UpsertResponse ==
     LET key == args[1]
         val == args[2] IN
     /\ state = UPSERT_RESPONSE
-    /\ state' = IF MemtableAtCapacity THEN WRITE_TO_DISK ELSE READY
+    /\ state' \in {WRITE_TO_DISK, READY}
     /\ ret' = "ok"
     /\ keysOf' = [keysOf EXCEPT ![memtable]=@ \union {key}]
     /\ valOf' = [valOf EXCEPT ![memtable, key]=val]
